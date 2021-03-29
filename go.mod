@@ -1,3 +1,3 @@
-module challenge.haraj.com.sa/harajsearch
+module challenge.haraj.com.sa/kraicklist
 
 go 1.15
