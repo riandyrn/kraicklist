@@ -1,1 +1,1 @@
-web: bin/harajsearch
+web: bin/kraicklist
