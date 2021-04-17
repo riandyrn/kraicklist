@@ -151,7 +151,7 @@ func (s *Searcher) FuzzySearch(query string) (Records, error) {
 
 	// limit the score relative to the first entry
 	indexScore = linq.From(indexScore).Where(func(r interface{}) bool {
-		return r.(KV).Value >= (indexScore[0].(KV).Value - 25)
+		return r.(KV).Value >= (indexScore[0].(KV).Value - 200)
 	}).Results()
 
 	for _, k := range indexScore {
