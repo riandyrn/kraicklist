@@ -7,9 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"os"
-	"strings"
+	"sort"
+	"strconv"
+
+	"github.com/ahmetb/go-linq/v3"
+	"github.com/sahilm/fuzzy"
 )
 
 func main() {
@@ -19,15 +24,18 @@ func main() {
 	if err != nil {
 		log.Fatalf("unable to load search data due: %v", err)
 	}
+
 	// define http handlers
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/", fs)
 	http.HandleFunc("/search", handleSearch(searcher))
+
 	// define port, we need to set it as env for Heroku deployment
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3001"
 	}
+
 	// start server
 	fmt.Printf("Server is listening on %s...", port)
 	err = http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
@@ -46,17 +54,45 @@ func handleSearch(s *Searcher) http.HandlerFunc {
 				w.Write([]byte("missing search query in query params"))
 				return
 			}
-			// search relevant records
-			records, err := s.Search(q)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(err.Error()))
-				return
+
+			// simple cache
+			if q != s.prevQuery {
+				// search relevant records
+				records, err := s.FuzzySearch(q)
+				s.prevRecords = records
+				s.prevQuery = q
+
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					w.Write([]byte(err.Error()))
+					return
+				}
 			}
+
 			// output success response
 			buf := new(bytes.Buffer)
 			encoder := json.NewEncoder(buf)
-			encoder.Encode(records)
+			res := map[string]interface{}{}
+
+			pageQuery := r.URL.Query().Get("page")
+			page, err := strconv.Atoi(pageQuery)
+			if err != nil || page <= 0 {
+				page = 1
+			}
+
+			sizeQuery := r.URL.Query().Get("size")
+			size, err := strconv.Atoi(sizeQuery)
+			if err != nil {
+				size = 10
+			}
+
+			res["data"] = linq.From(s.prevRecords).Skip((page - 1) * size).Take((size)).Results()
+			res["page"] = page
+			res["size"] = size
+			res["totalPage"] = math.Ceil(float64(s.prevRecords.Len() / size))
+			res["total"] = s.prevRecords.Len()
+
+			encoder.Encode(res)
 			w.Header().Set("Content-Type", "application/json")
 			w.Write(buf.Bytes())
 		},
@@ -64,7 +100,9 @@ func handleSearch(s *Searcher) http.HandlerFunc {
 }
 
 type Searcher struct {
-	records []Record
+	records     Records
+	prevRecords Records
+	prevQuery   string
 }
 
 func (s *Searcher) Load(filepath string) error {
@@ -74,13 +112,15 @@ func (s *Searcher) Load(filepath string) error {
 		return fmt.Errorf("unable to open source file due: %v", err)
 	}
 	defer file.Close()
+
 	// read as gzip
 	reader, err := gzip.NewReader(file)
 	if err != nil {
 		return fmt.Errorf("unable to initialize gzip reader due: %v", err)
 	}
+
 	// read the reader using scanner to contstruct records
-	var records []Record
+	var records Records
 	cs := bufio.NewScanner(reader)
 	for cs.Scan() {
 		var r Record
@@ -95,13 +135,29 @@ func (s *Searcher) Load(filepath string) error {
 	return nil
 }
 
-func (s *Searcher) Search(query string) ([]Record, error) {
-	var result []Record
-	for _, record := range s.records {
-		if strings.Contains(record.Title, query) || strings.Contains(record.Content, query) {
-			result = append(result, record)
-		}
+func (s *Searcher) FuzzySearch(query string) (Records, error) {
+	type kv struct {
+		Key   int
+		Value int
 	}
+
+	var indexScore []kv
+	var result Records
+
+	fuzzyResults := fuzzy.FindFrom(query, s.records)
+
+	for _, r := range fuzzyResults {
+		indexScore = append(indexScore, kv{r.Index, r.Score})
+	}
+
+	sort.Slice(indexScore, func(i, j int) bool {
+		return indexScore[i].Value > indexScore[j].Value
+	})
+
+	for _, k := range indexScore {
+		result = append(result, s.records[k.Key])
+	}
+
 	return result, nil
 }
 
@@ -113,4 +169,14 @@ type Record struct {
 	Tags      []string `json:"tags"`
 	UpdatedAt int64    `json:"updated_at"`
 	ImageURLs []string `json:"image_urls"`
+}
+
+type Records []Record
+
+func (r Records) String(i int) string {
+	return r[i].Title + " " + r[i].Content
+}
+
+func (r Records) Len() int {
+	return len(r)
 }

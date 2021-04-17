@@ -1,5 +1,30 @@
 # KraickList
 
+## Improvement
+
+1. Pagination
+
+Pagination helps us to limit the total search result shown to the user at a time. This makes the API data transfer become faster because it loads fewer item at a time.
+
+   <img src="./media/basic_search.gif"/>
+
+
+2. Fuzzy search
+
+The odds of user will type wrong word or mixed case is inevitable. Instead of stopping the user experience by returning error, it would be better if the search engine use fuzzy search method to search the item, so that results with closer match will appear to the user.
+
+<img src="./media/fuzzy_search.gif"/>
+
+
+3. Simple cache on the pagination result
+
+Assuming the user use the pagination button, the results array on the server would be the same as previous. To save us time on the searching, I apply simple caching mechanism. This can be improved by using Redis or other caching service to make our API instance stay stateless.
+
+<img src="./media/cache.png"/>
+
+
+
+---
 Welcome to Haraj take home challenge!
 
 In this repository you will find simple web app for fictional startup called KraickList. This app will allow users to search ads from given sample data located in `data.gz`.

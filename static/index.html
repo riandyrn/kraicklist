@@ -12,24 +12,73 @@
     <div>
         <form id="form" autocomplete="off">
             <input type="text" id="query" name="query">
-            <button type="submit">Search</button>
+            <button type="submit" onclick="search()">Search</button>
+            <button type="submit" onclick="decrementPage()" id="prevButton">Previous</button>
+            <button type="submit" onclick="incrementPage()" id="nextButton">Next</button>
         </form>
     </div>
     <div>
+        <p id="summary"></p>
         <ul id="resultList"></ul>
     </div>
     <script>
+        window.addEventListener('load', function () {
+            document.getElementById("prevButton").style.visibility = "hidden";
+            document.getElementById("nextButton").style.visibility = "hidden";
+        })
+
+        var page = 1;
+        var size = 10;
+        var totalPage = -1;
+        var total = -1;
+
+
+        const search = (e) => {
+            page = 1
+            Controller.search(e)
+        }
+
+        const incrementPage = (e) => {
+            page += 1
+            if (page >= totalPage) page = totalPage
+            Controller.search(e)
+        }
+
+        const decrementPage = (e) => {
+            page -= 1
+            if (page <= 0) page = 0
+            Controller.search(e)
+        }
+
         const Controller = {
             search: (ev) => {
                 ev.preventDefault();
                 const data = Object.fromEntries(new FormData(form));
-                const response = fetch(`/search?q=${data.query}`).then((response) => {
+                const response = fetch(`/search?q=${data.query}&page=${page}&size=${size}`).then((response) => {
                     response.json().then((results) => {
-                        if (!results) {
+                        if (!results.data) {
                             alert(`No result for ${data.query}`);
                             return
                         }
-                        Controller.updateList(results);
+                        Controller.updateList(results.data);
+                        totalPage = results.totalPage;
+                        total = results.total;
+                        page = results.page;
+
+                        document.getElementById("summary").innerHTML = "Showing page " + page + " of " + totalPage + " (" + (1 + (page - 1) * size) + "-" + page * size + " of " + total + " items)";
+
+                        if (page == 1) {
+                            document.getElementById("prevButton").style.visibility = "hidden";
+                        } else {
+                            document.getElementById("prevButton").style.visibility = "visible";
+                        }
+
+                        if (page < totalPage) {
+                            document.getElementById("nextButton").style.visibility = "visible";
+                        } else {
+                            document.getElementById("nextButton").style.visibility = "hidden";
+                        }
+
                     });
                 });
             },
