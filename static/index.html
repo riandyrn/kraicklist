@@ -65,20 +65,15 @@
                         total = results.total;
                         page = results.page;
 
-                        document.getElementById("summary").innerHTML = "Showing page " + page + " of " + totalPage + " (" + (1 + (page - 1) * size) + "-" + page * size + " of " + total + " items)";
+                        const firstElement = (1 + (page - 1) * size)
+                        let lastElement = page === totalPage ? (firstElement - 1) + results.data.length : page * size
+                        document.getElementById("summary").innerHTML = "Showing page " + page + " of " + totalPage + " (" + firstElement + "-" + lastElement + " of " + total + " items)";
 
-                        if (page == 1) {
-                            document.getElementById("prevButton").style.visibility = "hidden";
-                        } else {
-                            document.getElementById("prevButton").style.visibility = "visible";
-                        }
+                        if (page == 1) document.getElementById("prevButton").style.visibility = "hidden";
+                        else document.getElementById("prevButton").style.visibility = "visible";
 
-                        if (page < totalPage) {
-                            document.getElementById("nextButton").style.visibility = "visible";
-                        } else {
-                            document.getElementById("nextButton").style.visibility = "hidden";
-                        }
-
+                        if (page < totalPage) document.getElementById("nextButton").style.visibility = "visible";
+                        else document.getElementById("nextButton").style.visibility = "hidden";
                     });
                 });
             },

@@ -89,7 +89,7 @@ func handleSearch(s *Searcher) http.HandlerFunc {
 			res["data"] = linq.From(s.prevRecords).Skip((page - 1) * size).Take((size)).Results()
 			res["page"] = page
 			res["size"] = size
-			res["totalPage"] = math.Ceil(float64(s.prevRecords.Len() / size))
+			res["totalPage"] = math.Ceil(float64(s.prevRecords.Len()) / float64(size))
 			res["total"] = s.prevRecords.Len()
 
 			encoder.Encode(res)
@@ -136,31 +136,35 @@ func (s *Searcher) Load(filepath string) error {
 }
 
 func (s *Searcher) FuzzySearch(query string) (Records, error) {
-	type kv struct {
-		Key   int
-		Value int
-	}
-
-	var indexScore []kv
+	var indexScore []interface{}
 	var result Records
 
 	fuzzyResults := fuzzy.FindFrom(query, s.records)
 
 	for _, r := range fuzzyResults {
-		indexScore = append(indexScore, kv{r.Index, r.Score})
+		indexScore = append(indexScore, KV{r.Index, r.Score})
 	}
 
 	sort.Slice(indexScore, func(i, j int) bool {
-		return indexScore[i].Value > indexScore[j].Value
+		return indexScore[i].(KV).Value > indexScore[j].(KV).Value
 	})
 
+	// limit the score relative to the first entry
+	indexScore = linq.From(indexScore).Where(func(r interface{}) bool {
+		return r.(KV).Value >= (indexScore[0].(KV).Value - 25)
+	}).Results()
+
 	for _, k := range indexScore {
-		result = append(result, s.records[k.Key])
+		result = append(result, s.records[k.(KV).Key])
 	}
 
 	return result, nil
 }
 
+type KV struct {
+	Key   int
+	Value int
+}
 type Record struct {
 	ID        int64    `json:"id"`
 	Title     string   `json:"title"`
