@@ -4,31 +4,26 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
-	"math"
 	"net/http"
 	"os"
-	"sort"
 	"strconv"
+	"strings"
 
-	"github.com/ahmetb/go-linq/v3"
-	"github.com/sahilm/fuzzy"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func main() {
-	// initialize searcher
-	searcher := &Searcher{}
-	err := searcher.Load("data.gz")
-	if err != nil {
-		log.Fatalf("unable to load search data due: %v", err)
-	}
+	// load data to sqlite
+	loadData("data.gz", "data.db")
 
 	// define http handlers
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/", fs)
-	http.HandleFunc("/search", handleSearch(searcher))
+	http.HandleFunc("/search", handleSearch())
 
 	// define port, we need to set it as env for Heroku deployment
 	port := os.Getenv("PORT")
@@ -38,13 +33,93 @@ func main() {
 
 	// start server
 	fmt.Printf("Server is listening on %s...", port)
-	err = http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
+	err := http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
 	if err != nil {
 		log.Fatalf("unable to start server due: %v", err)
 	}
 }
 
-func handleSearch(s *Searcher) http.HandlerFunc {
+func loadData(filepath string, dbpath string) error {
+	if _, err := os.Stat(dbpath); os.IsNotExist(err) {
+		fmt.Println("Loading data...")
+
+		db, err := sql.Open("sqlite3", dbpath)
+		if err != nil {
+			return fmt.Errorf("%q", err)
+		}
+		defer db.Close()
+
+		sqlStatement := `
+			CREATE TABLE record (
+				id INTEGER NOT NULL PRIMARY KEY,
+				title TEXT,
+				content TEXT,
+				thumb_url TEXT,
+				tags TEXT,
+				updated_at INTEGER,
+				image_urls TEXT
+			);
+		`
+		_, err = db.Exec(sqlStatement)
+		if err != nil {
+			return fmt.Errorf("%q: %s", err, sqlStatement)
+		}
+
+		// open file
+		file, err := os.Open(filepath)
+		if err != nil {
+			return fmt.Errorf("unable to open source file due: %v", err)
+		}
+		defer file.Close()
+
+		// read as gzip
+		reader, err := gzip.NewReader(file)
+		if err != nil {
+			return fmt.Errorf("unable to initialize gzip reader due: %v", err)
+		}
+
+		// read the reader using scanner to contstruct records
+
+		cs := bufio.NewScanner(reader)
+		for cs.Scan() {
+			var r Record
+			err = json.Unmarshal(cs.Bytes(), &r)
+			if err != nil {
+				continue
+			}
+
+			script := fmt.Sprintf(`INSERT INTO record(id, title, content, thumb_url, tags,updated_at,image_urls) values(
+				%d,
+				"%s",
+				"%s",
+				"%s",
+				"%s",
+				%d,
+				"%s"
+			);
+			`,
+				r.ID,
+				r.Title,
+				r.Content,
+				r.ThumbURL,
+				strings.Join(r.Tags[:], "\t"), // tsv formatted
+				r.UpdatedAt,
+				strings.Join(r.ImageURLs[:], "\t"), // tsv formatted
+			)
+
+			_, err = db.Exec(script)
+			if err != nil {
+				log.Fatal(err)
+				continue
+			}
+		}
+	}
+
+	fmt.Println("Database is ready...")
+	return nil
+}
+
+func handleSearch() http.HandlerFunc {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			// fetch query string from query params
@@ -54,25 +129,6 @@ func handleSearch(s *Searcher) http.HandlerFunc {
 				w.Write([]byte("missing search query in query params"))
 				return
 			}
-
-			// simple cache
-			if q != s.prevQuery {
-				// search relevant records
-				records, err := s.FuzzySearch(q)
-				s.prevRecords = records
-				s.prevQuery = q
-
-				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					w.Write([]byte(err.Error()))
-					return
-				}
-			}
-
-			// output success response
-			buf := new(bytes.Buffer)
-			encoder := json.NewEncoder(buf)
-			res := map[string]interface{}{}
 
 			pageQuery := r.URL.Query().Get("page")
 			page, err := strconv.Atoi(pageQuery)
@@ -86,11 +142,21 @@ func handleSearch(s *Searcher) http.HandlerFunc {
 				size = 10
 			}
 
-			res["data"] = linq.From(s.prevRecords).Skip((page - 1) * size).Take((size)).Results()
+			cursorQuery := r.URL.Query().Get("cursor")
+			cursor, err := strconv.Atoi(cursorQuery)
+			if err != nil {
+				cursor = -1
+			}
+
+			// output success response
+			buf := new(bytes.Buffer)
+			encoder := json.NewEncoder(buf)
+			res := map[string]interface{}{}
+
+			res["q"] = q
 			res["page"] = page
 			res["size"] = size
-			res["totalPage"] = math.Ceil(float64(s.prevRecords.Len()) / float64(size))
-			res["total"] = s.prevRecords.Len()
+			res["cursor"] = cursor
 
 			encoder.Encode(res)
 			w.Header().Set("Content-Type", "application/json")
@@ -99,72 +165,6 @@ func handleSearch(s *Searcher) http.HandlerFunc {
 	)
 }
 
-type Searcher struct {
-	records     Records
-	prevRecords Records
-	prevQuery   string
-}
-
-func (s *Searcher) Load(filepath string) error {
-	// open file
-	file, err := os.Open(filepath)
-	if err != nil {
-		return fmt.Errorf("unable to open source file due: %v", err)
-	}
-	defer file.Close()
-
-	// read as gzip
-	reader, err := gzip.NewReader(file)
-	if err != nil {
-		return fmt.Errorf("unable to initialize gzip reader due: %v", err)
-	}
-
-	// read the reader using scanner to contstruct records
-	var records Records
-	cs := bufio.NewScanner(reader)
-	for cs.Scan() {
-		var r Record
-		err = json.Unmarshal(cs.Bytes(), &r)
-		if err != nil {
-			continue
-		}
-		records = append(records, r)
-	}
-	s.records = records
-
-	return nil
-}
-
-func (s *Searcher) FuzzySearch(query string) (Records, error) {
-	var indexScore []interface{}
-	var result Records
-
-	fuzzyResults := fuzzy.FindFrom(query, s.records)
-
-	for _, r := range fuzzyResults {
-		indexScore = append(indexScore, KV{r.Index, r.Score})
-	}
-
-	sort.Slice(indexScore, func(i, j int) bool {
-		return indexScore[i].(KV).Value > indexScore[j].(KV).Value
-	})
-
-	// limit the score relative to the first entry
-	indexScore = linq.From(indexScore).Where(func(r interface{}) bool {
-		return r.(KV).Value >= (indexScore[0].(KV).Value - 200)
-	}).Results()
-
-	for _, k := range indexScore {
-		result = append(result, s.records[k.(KV).Key])
-	}
-
-	return result, nil
-}
-
-type KV struct {
-	Key   int
-	Value int
-}
 type Record struct {
 	ID        int64    `json:"id"`
 	Title     string   `json:"title"`
@@ -176,11 +176,3 @@ type Record struct {
 }
 
 type Records []Record
-
-func (r Records) String(i int) string {
-	return r[i].Title + " " + r[i].Content
-}
-
-func (r Records) Len() int {
-	return len(r)
-}
