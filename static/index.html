@@ -6,12 +6,32 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KraickList - Find Your Needs Here</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        /* Create two equal columns that floats next to each other */
+        .column {
+            float: left;
+            padding: 10px;
+            max-width: 500px;
+        }
+
+        /* Clear floats after the columns */
+        .row:after {
+            content: "";
+            display: table;
+            clear: both;
+        }
+    </style>
 </head>
 
 <body>
     <div>
         <form id="form" autocomplete="off">
-            <input type="text" id="query" name="query" required pattern="[a-zA-Z0-9+-.()\[\]*/,; ]+" placeholder="Example: IPHONE">
+            <input type="text" id="query" name="query" required pattern="[a-zA-Z0-9+-.()\[\]*/,;: ]+"
+                placeholder="Example: IPHONE">
             <button type="submit" onclick="search()">Search</button>
             <button type="submit" onclick="prevPage()" id="prevButton">Previous</button>
             <button type="submit" onclick="nextPage()" id="nextButton">Next</button>
@@ -19,12 +39,12 @@
     </div>
     <div>
         <p id="summary"></p>
-        <ul id="resultList"></ul>
+        <ul id="resultList" style="list-style-type:none;"></ul>
     </div>
     <script>
         window.addEventListener('load', function () {
-            document.getElementById("prevButton").style.visibility = "hidden";
-            document.getElementById("nextButton").style.visibility = "hidden";
+            document.getElementById("prevButton").disabled = true;
+            document.getElementById("nextButton").disabled = true;
         })
 
         var cursor = []
@@ -66,11 +86,11 @@
                             const lastElement = (cursor.length - 1) === totalPage ? (firstElement - 1) + results.docs.length : (cursor.length - 1) * size
                             document.getElementById("summary").innerHTML = "Showing page " + (cursor.length - 1) + " of " + totalPage + " (" + firstElement + "-" + lastElement + " of " + total + " items)";
 
-                            if (cursor.length === 2) document.getElementById("prevButton").style.visibility = "hidden";
-                            else document.getElementById("prevButton").style.visibility = "visible";
+                            if (cursor.length === 2) document.getElementById("prevButton").disabled = true;
+                            else document.getElementById("prevButton").disabled = false;
 
-                            if (results.remainingItems > 0) document.getElementById("nextButton").style.visibility = "visible";
-                            else document.getElementById("nextButton").style.visibility = "hidden";
+                            if (results.remainingItems > 0) document.getElementById("nextButton").disabled = false;
+                            else document.getElementById("nextButton").disabled = true;
                         }
                     });
                 });
@@ -82,10 +102,16 @@
                     rows.push(
                         `
                             <li>
-                                <div>
-                                    <p>${result.title}</p>
-                                    <p>${result.content}</p>
+                                <div class="row">
+                                    <div class="column" width=200>
+                                        <img src="${result.thumb_url}" width=150/>
+                                    </div>
+                                    <div class="column">
+                                        <p>${result.title}</p>
+                                        <p>${result.content}</p>
+                                    </div>
                                 </div>
+                                <br/><br/>
                             </li>
                         `
                     );
