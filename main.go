@@ -11,19 +11,35 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
 func main() {
-	// load data to sqlite
-	loadData("data.gz", "data.db")
+	dbpath := os.Getenv("DB_PATH")
+	db, err := sql.Open("sqlite3", dbpath)
+	if err != nil {
+		log.Fatalf("Cannot connect to database : %q", err)
+		return
+	}
+	defer db.Close()
+
+	// migration
+	migrationOnly := os.Getenv("MIGRATION_ONLY")
+	if migrationOnly == "TRUE" {
+		// load data to sqlite
+		sourcepath := os.Getenv("SOURCE_PATH")
+		err := loadData(db, sourcepath, dbpath)
+		if err != nil {
+			log.Fatalf("unable to start server due: %v", err)
+		}
+		return
+	}
 
 	// define http handlers
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/", fs)
-	http.HandleFunc("/search", handleSearch())
+	http.HandleFunc("/search", handleSearch(db))
 
 	// define port, we need to set it as env for Heroku deployment
 	port := os.Getenv("PORT")
@@ -33,36 +49,42 @@ func main() {
 
 	// start server
 	fmt.Printf("Server is listening on %s...", port)
-	err := http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
+	err = http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
 	if err != nil {
 		log.Fatalf("unable to start server due: %v", err)
 	}
 }
 
-func loadData(filepath string, dbpath string) error {
+func loadData(db *sql.DB, filepath string, dbpath string) error {
 	if _, err := os.Stat(dbpath); os.IsNotExist(err) {
 		fmt.Println("Loading data...")
 
-		db, err := sql.Open("sqlite3", dbpath)
-		if err != nil {
-			return fmt.Errorf("%q", err)
-		}
-		defer db.Close()
-
-		sqlStatement := `
-			CREATE TABLE record (
+		script := `
+			CREATE TABLE records (
 				id INTEGER NOT NULL PRIMARY KEY,
 				title TEXT,
 				content TEXT,
 				thumb_url TEXT,
-				tags TEXT,
-				updated_at INTEGER,
-				image_urls TEXT
+				updated_at INTEGER
+			);
+
+			CREATE TABLE tags (
+				id INTEGER NOT NULL PRIMARY KEY,
+				record_id INTEGER,
+				tag TEXT,
+				FOREIGN KEY(record_id) REFERENCES records(id)
+			);
+
+			CREATE TABLE images (
+				id INTEGER NOT NULL PRIMARY KEY,
+				record_id INTEGER,
+				url TEXT,
+				FOREIGN KEY(record_id) REFERENCES records(id)
 			);
 		`
-		_, err = db.Exec(sqlStatement)
+		_, err = db.Exec(script)
 		if err != nil {
-			return fmt.Errorf("%q: %s", err, sqlStatement)
+			return fmt.Errorf("%q: %s", err, script)
 		}
 
 		// open file
@@ -88,29 +110,56 @@ func loadData(filepath string, dbpath string) error {
 				continue
 			}
 
-			script := fmt.Sprintf(`INSERT INTO record(id, title, content, thumb_url, tags,updated_at,image_urls) values(
+			script = fmt.Sprintf(`INSERT INTO records(id, title, content, thumb_url, updated_at) values(
 				%d,
 				"%s",
 				"%s",
 				"%s",
-				"%s",
-				%d,
-				"%s"
+				%d
 			);
 			`,
 				r.ID,
 				r.Title,
 				r.Content,
 				r.ThumbURL,
-				strings.Join(r.Tags[:], "\t"), // tsv formatted
 				r.UpdatedAt,
-				strings.Join(r.ImageURLs[:], "\t"), // tsv formatted
 			)
 
 			_, err = db.Exec(script)
 			if err != nil {
-				log.Fatal(err)
-				continue
+				return fmt.Errorf("unable to load source data: %v", err)
+			}
+
+			for _, element := range r.Tags {
+				script = fmt.Sprintf(`INSERT INTO tags(record_id, tag) values(
+					%d,
+					"%s"
+				);
+				`,
+					r.ID,
+					element,
+				)
+
+				_, err = db.Exec(script)
+				if err != nil {
+					return fmt.Errorf("unable to load source data: %v", err)
+				}
+			}
+
+			for _, element := range r.ImageURLs {
+				script = fmt.Sprintf(`INSERT INTO images(record_id, url) values(
+					%d,
+					"%s"
+				);
+				`,
+					r.ID,
+					element,
+				)
+
+				_, err = db.Exec(script)
+				if err != nil {
+					return fmt.Errorf("unable to load source data: %v", err)
+				}
 			}
 		}
 	}
@@ -119,7 +168,7 @@ func loadData(filepath string, dbpath string) error {
 	return nil
 }
 
-func handleSearch() http.HandlerFunc {
+func handleSearch(db *sql.DB) http.HandlerFunc {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			// fetch query string from query params
