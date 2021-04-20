@@ -9,4 +9,4 @@ RUN go mod download
 RUN go build -o main .
 RUN MIGRATION_ONLY=TRUE SOURCE_PATH=data.gz /app/main
 
-CMD ["/app/main"]
+CMD ["sh","-c","DB_PATH=data.db /app/main"]
