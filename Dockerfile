@@ -7,6 +7,6 @@ WORKDIR /app
 
 RUN go mod download
 RUN go build -o main .
-RUN MIGRATION_ONLY=TRUE SOURCE_PATH=test-data.gz /app/main
+RUN MIGRATION_ONLY=TRUE SOURCE_PATH=data.gz /app/main
 
 CMD ["/app/main"]
