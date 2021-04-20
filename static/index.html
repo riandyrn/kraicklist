@@ -11,10 +11,10 @@
 <body>
     <div>
         <form id="form" autocomplete="off">
-            <input type="text" id="query" name="query">
+            <input type="text" id="query" name="query" required pattern="[a-zA-Z0-9+-.()\[\]*/,; ]+" placeholder="Example: IPHONE">
             <button type="submit" onclick="search()">Search</button>
-            <button type="submit" onclick="decrementPage()" id="prevButton">Previous</button>
-            <button type="submit" onclick="incrementPage()" id="nextButton">Next</button>
+            <button type="submit" onclick="prevPage()" id="prevButton">Previous</button>
+            <button type="submit" onclick="nextPage()" id="nextButton">Next</button>
         </form>
     </div>
     <div>
@@ -27,26 +27,21 @@
             document.getElementById("nextButton").style.visibility = "hidden";
         })
 
-        var page = 1;
+        var cursor = []
         var size = 10;
-        var totalPage = -1;
-        var total = -1;
-
 
         const search = (e) => {
-            page = 1
+            cursor = [0]
             Controller.search(e)
         }
 
-        const incrementPage = (e) => {
-            page += 1
-            if (page >= totalPage) page = totalPage
+        const nextPage = (e) => {
             Controller.search(e)
         }
 
-        const decrementPage = (e) => {
-            page -= 1
-            if (page <= 0) page = 0
+        const prevPage = (e) => {
+            cursor.pop() && cursor.pop()
+            if (cursor.length === 0) cursor = [0]
             Controller.search(e)
         }
 
@@ -54,26 +49,29 @@
             search: (ev) => {
                 ev.preventDefault();
                 const data = Object.fromEntries(new FormData(form));
-                const response = fetch(`/search?q=${data.query}&page=${page}&size=${size}`).then((response) => {
+                const response = fetch(`/search?q=${data.query}&cursor=${cursor.slice(-1)[0]}&size=${size}`).then((response) => {
                     response.json().then((results) => {
-                        if (!results.data) {
+                        if (!results.docs) {
                             alert(`No result for ${data.query}`);
                             return
+                        } else if (results.docs.length > 0) {
+                            Controller.updateList(results.docs);
+
+                            const total = results.count;
+                            const totalPage = Math.ceil(total / size);
+
+                            if (results.nextCursor) cursor.push(results.nextCursor)
+
+                            const firstElement = (1 + (cursor.length - 2) * size)
+                            const lastElement = (cursor.length - 1) === totalPage ? (firstElement - 1) + results.docs.length : (cursor.length - 1) * size
+                            document.getElementById("summary").innerHTML = "Showing page " + (cursor.length - 1) + " of " + totalPage + " (" + firstElement + "-" + lastElement + " of " + total + " items)";
+
+                            if (cursor.length === 2) document.getElementById("prevButton").style.visibility = "hidden";
+                            else document.getElementById("prevButton").style.visibility = "visible";
+
+                            if (results.remainingItems > 0) document.getElementById("nextButton").style.visibility = "visible";
+                            else document.getElementById("nextButton").style.visibility = "hidden";
                         }
-                        Controller.updateList(results.data);
-                        totalPage = results.totalPage;
-                        total = results.total;
-                        page = results.page;
-
-                        const firstElement = (1 + (page - 1) * size)
-                        let lastElement = page === totalPage ? (firstElement - 1) + results.data.length : page * size
-                        document.getElementById("summary").innerHTML = "Showing page " + page + " of " + totalPage + " (" + firstElement + "-" + lastElement + " of " + total + " items)";
-
-                        if (page == 1) document.getElementById("prevButton").style.visibility = "hidden";
-                        else document.getElementById("prevButton").style.visibility = "visible";
-
-                        if (page < totalPage) document.getElementById("nextButton").style.visibility = "visible";
-                        else document.getElementById("nextButton").style.visibility = "hidden";
                     });
                 });
             },

@@ -179,12 +179,6 @@ func handleSearch(db *sql.DB) http.HandlerFunc {
 				return
 			}
 
-			pageQuery := r.URL.Query().Get("page")
-			page, err := strconv.Atoi(pageQuery)
-			if err != nil || page <= 0 {
-				page = 1
-			}
-
 			sizeQuery := r.URL.Query().Get("size")
 			size, err := strconv.Atoi(sizeQuery)
 			if err != nil {
@@ -194,7 +188,75 @@ func handleSearch(db *sql.DB) http.HandlerFunc {
 			cursorQuery := r.URL.Query().Get("cursor")
 			cursor, err := strconv.Atoi(cursorQuery)
 			if err != nil {
-				cursor = -1
+				cursor = 0
+			}
+
+			script := fmt.Sprintf(`SELECT COUNT (1) FROM records WHERE title LIKE '%%%s%%' OR content LIKE '%%%s%%'`, q, q)
+
+			var count int
+			result, err := db.Query(script)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte("query failed"))
+				return
+			}
+
+			for result.Next() {
+				err := result.Scan(&count)
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+
+			script = fmt.Sprintf(`SELECT id, title, content, thumb_url FROM records WHERE (title LIKE '%%%s%%' OR content LIKE '%%%s%%') AND id > %d LIMIT %d`, q, q, cursor, size)
+
+			var records Records
+			result, err = db.Query(script)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte("query failed"))
+				return
+			}
+
+			for result.Next() {
+				var record Record
+
+				var id int
+				var title string
+				var content string
+				var thumb_url string
+
+				err = result.Scan(&id, &title, &content, &thumb_url)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				record.ID = id
+				record.Title = title
+				record.Content = content
+				record.ThumbURL = thumb_url
+
+				records = append(records, record)
+			}
+
+			var remainingItems int
+			if len(records) > 0 {
+				script = fmt.Sprintf(`SELECT COUNT (1) FROM records WHERE (title LIKE '%%%s%%' OR content LIKE '%%%s%%') AND id > %d`, q, q, records[len(records)-1].ID)
+				result, err = db.Query(script)
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					w.Write([]byte("query failed"))
+					return
+				}
+
+				for result.Next() {
+					err := result.Scan(&remainingItems)
+					if err != nil {
+						log.Fatal(err)
+					}
+				}
+			} else {
+				remainingItems = 0
 			}
 
 			// output success response
@@ -202,10 +264,15 @@ func handleSearch(db *sql.DB) http.HandlerFunc {
 			encoder := json.NewEncoder(buf)
 			res := map[string]interface{}{}
 
-			res["q"] = q
-			res["page"] = page
+			res["docs"] = records
+			res["count"] = count
+			res["remainingItems"] = remainingItems
 			res["size"] = size
 			res["cursor"] = cursor
+
+			if len(records) > 0 {
+				res["nextCursor"] = records[len(records)-1].ID
+			}
 
 			encoder.Encode(res)
 			w.Header().Set("Content-Type", "application/json")
@@ -215,7 +282,7 @@ func handleSearch(db *sql.DB) http.HandlerFunc {
 }
 
 type Record struct {
-	ID        int64    `json:"id"`
+	ID        int      `json:"id"`
 	Title     string   `json:"title"`
 	Content   string   `json:"content"`
 	ThumbURL  string   `json:"thumb_url"`
