@@ -1,3 +1,3 @@
-module challenge.haraj.com.sa/kraicklist
+module github.com/knightazura
 
 go 1.15
