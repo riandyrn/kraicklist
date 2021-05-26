@@ -37,12 +37,13 @@
             updateList: (results) => {
                 const rows = [];
                 for (let result of results) {
+                    const data = result.Data
                     rows.push(
                         `
                             <li>
                                 <div>
-                                    <p>${result.title}</p>
-                                    <p>${result.content}</p>
+                                    <p>${data.title}</p>
+                                    <p>${data.content}</p>
                                 </div>
                             </li>
                         `
