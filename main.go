@@ -23,7 +23,7 @@ func main() {
 	searcher := &services.Engine{}
 
 	// Setup Ads "GeneralDocument" to be indexed document
-	searcher.SetupDocument(ads, "advertisement", "local")
+	searcher.SetupDocument(ads, "advertisement", "meilisearch")
 	log.Printf("Jumlah data pada searcher %d dan ads %d", len(searcher.LocalDocuments), len(ads))
 
 	// Define http handlers
