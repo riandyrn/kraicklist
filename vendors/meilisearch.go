@@ -1,31 +1,63 @@
 package vendors
 
 import (
+	"log"
+	"math/rand"
+
 	"github.com/knightazura/data/model"
 	"github.com/meilisearch/meilisearch-go"
-	"math/rand"
 )
 
 type Meilisearch struct {
-	Client      meilisearch.ClientInterface
-	indexName   string
+	Client meilisearch.ClientInterface
 }
 
-func InitMeilisearchEngine(indexName string) (*Meilisearch, error) {
+func InitMeilisearch(indexName string) *Meilisearch {
 	config := meilisearch.Config{
-		Host: "http://127.0.0.1",
+		Host: "http://127.0.0.1:7700",
 	}
 
-	meilisearchInstance := meilisearch.NewClient(config)
+	client := meilisearch.NewClient(config)
 
 	return &Meilisearch{
-		Client: meilisearchInstance,
-		indexName: indexName,
-	}, nil
+		Client: client,
+	}
 }
 
-func (ms *Meilisearch) PerformSearch(query string) (docs []model.SearchResponse) {
-	res, _ := ms.Client.Search(ms.indexName).Search(meilisearch.SearchRequest{
+func MSAddDocuments(client meilisearch.ClientInterface, docs model.GeneralDocuments, indexName string) {
+	get, _ := client.Indexes().Get(indexName)
+
+	// Create the index if it's not there
+	if get == nil {
+		_, err := client.Indexes().Create(meilisearch.CreateIndexRequest{
+			UID: indexName,
+		})
+
+		if err != nil {
+			log.Fatalf("Failed to create index of %s: %v", indexName, err)
+			return
+		}
+	}
+
+	var documents []model.Advertisement
+	for _, doc := range docs {
+		documents = append(documents, model.Advertisement{
+			ID: doc.ID,
+			Title: doc.Title,
+			Content: doc.Content,
+		})
+	}
+
+	_, err := client.Documents(indexName).AddOrUpdate(documents)
+	if err != nil {
+		log.Fatalf("Failed to add %s documents: %v", indexName, err)
+		return
+	}
+	log.Println("Berhasil memasukkan dokumen")
+}
+
+func MSSearch(client meilisearch.ClientInterface, indexName string, query string) (docs []model.SearchResponse) {
+	res, _ := client.Search(indexName).Search(meilisearch.SearchRequest{
 		Query: query,
 		Limit: 10,
 		Offset: 1,

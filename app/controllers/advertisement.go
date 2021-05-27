@@ -3,22 +3,23 @@ package controllers
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/knightazura/services"
 	"net/http"
+
+	"github.com/knightazura/contracts"
 )
 
 type Advertisement struct {
-	Services AdServices
+	EntityName string
+	SearchEngine contracts.SearchEngine
 }
 
-type AdServices struct {
-	SearchEngine    *services.Engine
-	Seeder          *services.Seeder
-}
+const entityName = "advertisement"
 
-func InitAdvertisement(services AdServices) *Advertisement {
+// TO DO: to pass config value as parameter
+func InitAdvertisement(se contracts.SearchEngine) *Advertisement {
 	return &Advertisement{
-		Services: services,
+		EntityName: entityName,
+		SearchEngine: se,
 	}
 }
 
@@ -27,10 +28,6 @@ func (controller *Advertisement) Search(writer http.ResponseWriter, req *http.Re
 
 	// Process the request
 	query := req.URL.Query().Get("q")
-	muid := req.URL.Query().Get("muid")
-	if muid == "" {
-		muid = "advertisement"
-	}
 
 	if len(query) == 0 {
 		writer.WriteHeader(http.StatusBadRequest)
@@ -39,14 +36,14 @@ func (controller *Advertisement) Search(writer http.ResponseWriter, req *http.Re
 	}
 
 	// Search relevant records
-	searchEngine := controller.Services.SearchEngine
+	searchEngine := controller.SearchEngine
 
-	records, err := searchEngine.Search(query, muid)
-	if err != nil {
-		writer.WriteHeader(http.StatusInternalServerError)
-		writer.Write([]byte(err.Error()))
-		return
-	}
+	records := searchEngine.PerformSearch(query)
+	// if err != nil {
+	// 	writer.WriteHeader(http.StatusInternalServerError)
+	// 	writer.Write([]byte(err.Error()))
+	// 	return
+	// }
 
 	// output success response
 	buf := new(bytes.Buffer)
