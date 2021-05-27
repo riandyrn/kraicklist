@@ -1,45 +1,44 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>KraickList - Find Your Needs Here</title>
-</head>
+  </head>
 
-<body>
+  <body>
     <div>
-        <form id="form" autocomplete="off">
-            <input type="text" id="query" name="query">
-            <button type="submit">Search</button>
-        </form>
+      <form id="form" autocomplete="off">
+        <input type="text" id="query" name="query" />
+        <button type="submit">Search</button>
+      </form>
     </div>
     <div>
-        <ul id="resultList"></ul>
+      <ul id="resultList"></ul>
     </div>
     <script>
-        const Controller = {
-            search: (ev) => {
-                ev.preventDefault();
-                const data = Object.fromEntries(new FormData(form));
-                const response = fetch(`/search?q=${data.query}&muid=advertisement`).then((response) => {
-                    response.json().then((results) => {
-                        if (!results) {
-                            alert(`No result for ${data.query}`);
-                            return
-                        }
-                        Controller.updateList(results);
-                    });
-                });
-            },
+      const Controller = {
+        search: ev => {
+          ev.preventDefault();
+          const data = Object.fromEntries(new FormData(form));
+          const response = fetch(`/search?q=${data.query}`).then(response => {
+            response.json().then(results => {
+              if (!results) {
+                alert(`No result for ${data.query}`);
+                return;
+              }
+              Controller.updateList(results);
+            });
+          });
+        },
 
-            updateList: (results) => {
-                const rows = [];
-                for (let result of results) {
-                    const data = result.Data
-                    rows.push(
-                        `
+        updateList: results => {
+          const rows = [];
+          for (let result of results) {
+            const data = result.Data;
+            rows.push(
+              `
                             <li>
                                 <div>
                                     <p>${data.title}</p>
@@ -47,15 +46,14 @@
                                 </div>
                             </li>
                         `
-                    );
-                }
-                resultList.innerHTML = rows.join(" ");
-            },
-        };
+            );
+          }
+          resultList.innerHTML = rows.join(" ");
+        }
+      };
 
-        const form = document.getElementById("form");
-        form.addEventListener("submit", Controller.search);
+      const form = document.getElementById("form");
+      form.addEventListener("submit", Controller.search);
     </script>
-</body>
-
+  </body>
 </html>
