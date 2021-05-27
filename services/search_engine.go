@@ -4,22 +4,28 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/knightazura/contracts"
 	"github.com/knightazura/data/model"
 	"github.com/knightazura/data/repository"
 	"github.com/knightazura/vendors"
-	"github.com/meilisearch/meilisearch-go"
-	"math/rand"
+	"log"
 	"net/http"
+	"os"
 )
 
 // A wrapper service of Search Engine
 // regardless of which search engine was used by the app
 type Engine struct {
+	Default                 contracts.SearchEngine
 	LocalDocuments 			model.GeneralDocuments
-	MeilisearchDocumets 	model.MeilisearchDocuments
 }
 
-const activeEngine = "meilisearch"
+func InitSearchEngine(indexName string) (*Engine, error) {
+	engine := getEngine(indexName)
+	return &Engine{
+		Default: engine,
+	}, nil
+}
 
 // Handler of HTTP request for search endpoint
 func (e *Engine) HandleSearch() http.HandlerFunc {
@@ -56,31 +62,19 @@ func (e *Engine) HandleSearch() http.HandlerFunc {
 
 // Abstraction method of "search"
 func (e *Engine) Search(query string, indexName string) (docs []model.SearchResponse, err error) {
-	switch activeEngine {
-	case "local":
+	if activeEngine == "local" {
 		docs = vendors.LocalPerformSearch(query, &e.LocalDocuments)
-	case "meilisearch":
-		var client = meilisearch.NewClient(meilisearch.Config{
-			Host: "http://127.0.0.1:7700",
-		})
-
-		searchResponse, err := client.Search(indexName).Search(meilisearch.SearchRequest{
-			Query: query,
-			Limit: 10,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		for _, h := range searchResponse.Hits {
-			docs = append(docs, model.SearchResponse{
-				ID: rand.Int63(),
-				Data: h,
-			})
-		}
-	case "default":
-		_ = fmt.Errorf("No search engine vendor")
 	}
+
+	if activeEngine == "meilisearch" {
+		client, err := vendors.InitMeilisearchEngine(indexName)
+		if err != nil {
+			fmt.Errorf(err.Error())
+		}
+
+		docs = client.PerformSearch(query)
+	}
+	_ = fmt.Errorf("No search engine vendor")
 	return
 }
 
@@ -95,4 +89,17 @@ func (e *Engine) SetupDocument(docs model.GeneralDocuments, docType string, engi
 		e.LocalDocuments = i.ToLocalDocument(docs)
 	}
 	return
+}
+
+// Get active search engine
+func getEngine(indexName string) contracts.SearchEngine {
+	switch os.Getenv("SEARCH_ENGINE_ACTIVE") {
+	case "meilisearch":
+		engine, err := vendors.InitMeilisearchEngine(indexName)
+		if err != nil {
+			log.Fatalln("Failed to initialize Meilisearch instance")
+		}
+		return engine
+	}
+	return nil
 }

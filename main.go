@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/knightazura/app/controllers"
 	"github.com/knightazura/data/model"
 	"github.com/knightazura/services"
 	"log"
@@ -10,6 +11,10 @@ import (
 )
 
 func main() {
+	// Setup controllers
+	handler := controllers.Base{
+		Advertisement: controllers.InitAdvertisement(),
+	}
 	// Init. Seeder
 	seeder := services.Seeder{}
 
@@ -26,7 +31,7 @@ func main() {
 	searcher.SetupDocument(ads, "advertisement", "meilisearch")
 	log.Printf("Jumlah data pada searcher %d dan ads %d", len(searcher.LocalDocuments), len(ads))
 
-	// Define http handlers
+	// Define http controllers
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/", fs)
 	http.HandleFunc("/search", searcher.HandleSearch())
