@@ -15,8 +15,8 @@ type Meilisearch struct {
 func InitMeilisearch() *Meilisearch {
 	config := meilisearch.Config{
 		Host: "http://127.0.0.1:7700",
+		//APIKey: "masterkey",
 	}
-
 	client := meilisearch.NewClient(config)
 
 	return &Meilisearch{
