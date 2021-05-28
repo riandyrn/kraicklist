@@ -1,10 +1,10 @@
 package vendors
 
 import (
+	"github.com/knightazura/domain"
 	"log"
 	"math/rand"
 
-	"github.com/knightazura/data/model"
 	"github.com/meilisearch/meilisearch-go"
 )
 
@@ -24,7 +24,7 @@ func InitMeilisearch(indexName string) *Meilisearch {
 	}
 }
 
-func MSAddDocuments(client meilisearch.ClientInterface, docs model.GeneralDocuments, indexName string) {
+func MSAddDocuments(client meilisearch.ClientInterface, docs domain.GeneralDocuments, indexName string) {
 	get, _ := client.Indexes().Get(indexName)
 
 	// Create the index if it's not there
@@ -39,11 +39,11 @@ func MSAddDocuments(client meilisearch.ClientInterface, docs model.GeneralDocume
 		}
 	}
 
-	var documents []model.Advertisement
+	var documents []domain.Advertisement
 	for _, doc := range docs {
-		documents = append(documents, model.Advertisement{
-			ID: doc.ID,
-			Title: doc.Title,
+		documents = append(documents, domain.Advertisement{
+			ID:      doc.ID,
+			Title:   doc.Title,
 			Content: doc.Content,
 		})
 	}
@@ -56,16 +56,16 @@ func MSAddDocuments(client meilisearch.ClientInterface, docs model.GeneralDocume
 	log.Println("Berhasil memasukkan dokumen")
 }
 
-func MSSearch(client meilisearch.ClientInterface, indexName string, query string) (docs []model.SearchResponse) {
+func MSSearch(client meilisearch.ClientInterface, indexName string, query string) (docs []domain.IndexedDocument) {
 	res, _ := client.Search(indexName).Search(meilisearch.SearchRequest{
-		Query: query,
-		Limit: 10,
+		Query:  query,
+		Limit:  10,
 		Offset: 1,
 	})
 
 	for _, h := range res.Hits {
-		docs = append(docs, model.SearchResponse{
-			ID: rand.Int63(),
+		docs = append(docs, domain.IndexedDocument{
+			ID:   rand.Int63(),
 			Data: h,
 		})
 	}
