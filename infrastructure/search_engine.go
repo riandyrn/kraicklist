@@ -1,11 +1,8 @@
 package infrastructure
 
 import (
-	"fmt"
-
 	"github.com/knightazura/contracts"
-	"github.com/knightazura/data/model"
-	"github.com/knightazura/services"
+	"github.com/knightazura/domain"
 	"github.com/knightazura/vendors"
 )
 

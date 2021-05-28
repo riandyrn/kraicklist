@@ -4,11 +4,9 @@ import (
 	"bufio"
 	"compress/gzip"
 	"encoding/json"
+	"github.com/knightazura/domain"
 	"log"
 	"os"
-
-	"github.com/knightazura/contracts"
-	"github.com/knightazura/data/model"
 )
 
 // A service to load and manage model that need
@@ -20,8 +18,8 @@ func InitSeeder() *Seeder {
 	return &Seeder{}
 }
 
-// Load model data from file and format it to GeneralDocument
-func (s *Seeder) LoadData(path string, model contracts.Indexer) (out model.GeneralDocuments){
+// Load advertisement model data from file
+func (s *Seeder) LoadData(path string) (out []domain.Advertisement){
 	// Open file
 	file, err := os.Open(path)
 	if err != nil {
@@ -40,6 +38,7 @@ func (s *Seeder) LoadData(path string, model contracts.Indexer) (out model.Gener
 	// read the reader using scanner to contstruct records
 	cs := bufio.NewScanner(reader)
 	for cs.Scan() {
+		var model domain.Advertisement
 		err = json.Unmarshal(cs.Bytes(), &model)
 		if err != nil {
 			continue
