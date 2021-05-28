@@ -12,34 +12,29 @@ type SearchEngineHandler struct {
 	// another client can be added here
 }
 
-func InitSearchEngine(indexName string) (contracts.SearchEngine, error) {
+func InitSearchEngine() (contracts.SearchEngine, error) {
 	seHandler := &SearchEngineHandler{}
 
-	// Meilisearch
-	meilisearch := vendors.InitMeilisearch(indexName)
-
-	seHandler.Meilisearch = meilisearch
-	seHandler.IndexName = indexName
+	// Create (any) search engine instances here
+	seHandler.Meilisearch = vendors.InitMeilisearch()
 
 	return seHandler, nil
 }
 
-// Challenge purpose
-func (se *SearchEngineHandler) SetupDocument() {
-	seeder := &services.Seeder{}
-	adDocs := seeder.LoadData("./data/data.gz", &model.Advertisement{})
-
-	vendors.MSAddDocuments(se.Meilisearch.Client, adDocs, se.IndexName)
+func (se *SearchEngineHandler) IndexDocuments(docs domain.GeneralDocuments, indexName string) {
+	// TO DO: Check the config which search engine client is using
+	client := se.Meilisearch.Client
+	vendors.MSAddDocuments(client, docs, indexName)
 }
 
-func (se *SearchEngineHandler) PerformSearch(query string) (docs []model.SearchResponse) {
-	// TO DO: Check the config which search engine vendors is using
+func (se *SearchEngineHandler) PerformSearch(query string, indexName string) (docs []domain.IndexedDocument) {
+	// TO DO: Check the config which search engine client is using
+	client := se.Meilisearch.Client
+
 	docs = vendors.MSSearch(
-		se.Meilisearch.Client, 
-		se.IndexName, 
+		client,
+		indexName,
 		query,
 	)
-
-	fmt.Print(se.IndexName, docs)
 	return
 }
