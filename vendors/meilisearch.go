@@ -12,7 +12,7 @@ type Meilisearch struct {
 	Client meilisearch.ClientInterface
 }
 
-func InitMeilisearch(indexName string) *Meilisearch {
+func InitMeilisearch() *Meilisearch {
 	config := meilisearch.Config{
 		Host: "http://127.0.0.1:7700",
 	}
