@@ -5,7 +5,7 @@ import (
 )
 
 func main() {
-	// Bootstrap the application
+	// Load configuration
 	infrastructure.Bootstrap()
 
 	// Dispatch the app
