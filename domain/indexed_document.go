@@ -1,9 +1,9 @@
-package model
+package domain
 
 /** Constructor for any formatted documents by any vendors */
 
 // Response format of searched documents
-type SearchResponse struct {
+type IndexedDocument struct {
 	ID int64
 	Data interface{}
 }
