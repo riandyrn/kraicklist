@@ -43,11 +43,7 @@ func (s *Seeder) LoadData(path string) (out []domain.Advertisement){
 		if err != nil {
 			continue
 		}
-
-		// Convert any models into general document
-		item, _ := model.ConvertToGeneralDocs()
-
-		out = append(out, item)
+		out = append(out, model)
 	}
 
 	return
