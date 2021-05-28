@@ -2,15 +2,17 @@ package infrastructure
 
 import (
 	"fmt"
+	"github.com/knightazura/interfaces"
+	"github.com/knightazura/services"
 	"log"
 	"net/http"
 	"os"
 
-	"github.com/knightazura/app/controllers"
 	"github.com/knightazura/contracts"
 )
 
 type Services struct{
+	Seeder *services.Seeder
 	SearchEngine contracts.SearchEngine
 }
 
@@ -21,12 +23,10 @@ func Dispatch(/** services should be parameters here */) {
 
 func setupServices() *Services {
 	// Search engine
-	searchEngine, _ := InitSearchEngine("advertisement")
-	
-	// Setup document
-	searchEngine.SetupDocument()
+	searchEngine, _ := InitSearchEngine()
 
 	return &Services{
+		Seeder: &services.Seeder{},
 		SearchEngine: searchEngine,
 	}
 }
@@ -36,10 +36,12 @@ func setupServer(services *Services) {
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/", fs)
 
-	adController := controllers.InitAdvertisement(services.SearchEngine)
+	adController := interfaces.InitAdvertisementController(services.SearchEngine, services.Seeder)
 
-	// App routing and controllers
-	http.HandleFunc("/search", adController.Search)
+	// Advertisement routes
+	http.HandleFunc("/advertisement/search", adController.Search)
+	// Challenge purpose: mock of /advertisement/upload endpoint
+	adController.Upload()
 
 	// Setup and start server
 	port := os.Getenv("APP_PORT")
