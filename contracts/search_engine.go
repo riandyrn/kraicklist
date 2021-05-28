@@ -5,6 +5,6 @@ import (
 )
 
 type SearchEngine interface {
-	PerformSearch(query string) []model.SearchResponse
-	SetupDocument()
+	PerformSearch(query string, indexName string) []domain.IndexedDocument
+	IndexDocuments(docs domain.GeneralDocuments, indexName string)
 }
