@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
@@ -10,7 +9,14 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/patrickmn/go-cache"
 )
+
+// Create a cache with a default expiration time of 5 minutes, and which
+// purges expired items every 10 minutes
+var kc = cache.New(5*time.Minute, 10*time.Minute)
 
 func main() {
 	// initialize searcher
@@ -19,28 +25,56 @@ func main() {
 	if err != nil {
 		log.Fatalf("unable to load search data due: %v", err)
 	}
-	// define http handlers
-	fs := http.FileServer(http.Dir("./static"))
-	http.Handle("/", fs)
-	http.HandleFunc("/search", handleSearch(searcher))
+
 	// define port, we need to set it as env for Heroku deployment
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3001"
 	}
-	// start server
-	fmt.Printf("Server is listening on %s...", port)
-	err = http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
-	if err != nil {
-		log.Fatalf("unable to start server due: %v", err)
+
+	// define http handlers
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", handleMain)
+	mux.HandleFunc("/search", handleSearch(searcher))
+
+	errorHandler := &ErrorHandler{
+		Handler: mux,
 	}
+
+	server := http.Server{
+		Addr:    fmt.Sprintf(":%s", port),
+		Handler: errorHandler,
+	}
+
+	// start server
+	fmt.Printf("Server is listening on %s... \n", port)
+	err = server.ListenAndServe()
+	if err != nil {
+		log.Fatalf("unable to start server due: %v \n", err)
+	}
+}
+
+func handleMain(w http.ResponseWriter, r *http.Request) {
+	// panic("handleMain")
+	http.ServeFile(w, r, "./static/index.html")
 }
 
 func handleSearch(s *Searcher) http.HandlerFunc {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
+			//panic("handleSearch")
+
 			// fetch query string from query params
 			q := r.URL.Query().Get("q")
+
+			//Get Cache
+			foo, found := kc.Get(q)
+			if found {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, foo)
+				return
+			}
+
 			if len(q) == 0 {
 				w.WriteHeader(http.StatusBadRequest)
 				w.Write([]byte("missing search query in query params"))
@@ -54,11 +88,17 @@ func handleSearch(s *Searcher) http.HandlerFunc {
 				return
 			}
 			// output success response
-			buf := new(bytes.Buffer)
-			encoder := json.NewEncoder(buf)
-			encoder.Encode(records)
+			encjson, error := json.Marshal(records)
+			if error != nil {
+				panic(error.Error())
+			}
+
+			json := string(encjson)
+			//Set Cache
+			kc.Set(q, json, cache.DefaultExpiration)
+
 			w.Header().Set("Content-Type", "application/json")
-			w.Write(buf.Bytes())
+			fmt.Fprint(w, json)
 		},
 	)
 }
@@ -97,8 +137,9 @@ func (s *Searcher) Load(filepath string) error {
 
 func (s *Searcher) Search(query string) ([]Record, error) {
 	var result []Record
+	word := strings.Fields(strings.ToLower(query))
 	for _, record := range s.records {
-		if strings.Contains(record.Title, query) || strings.Contains(record.Content, query) {
+		if contains(word, strings.ToLower(record.Title)) || contains(word, strings.ToLower(record.Content)) {
 			result = append(result, record)
 		}
 	}
@@ -113,4 +154,39 @@ type Record struct {
 	Tags      []string `json:"tags"`
 	UpdatedAt int64    `json:"updated_at"`
 	ImageURLs []string `json:"image_urls"`
+}
+
+func contains(s []string, str string) bool {
+	k := strings.Fields(str)
+	wordTrue := false
+	for _, v := range s {
+		wordTrue = false
+		for _, i := range k {
+			if i == v {
+				wordTrue = true
+				break
+			}
+		}
+		if !wordTrue {
+			return false
+		}
+	}
+
+	return true
+}
+
+type ErrorHandler struct {
+	Handler http.Handler
+}
+
+func (errorHandler *ErrorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		err := recover()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "Error: %s", err)
+			fmt.Printf("Error: %s", err)
+		}
+	}()
+	errorHandler.Handler.ServeHTTP(w, r)
 }
